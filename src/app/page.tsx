@@ -1,65 +1,222 @@
-import Image from "next/image";
+"use client";
+import React, { useEffect, useState } from "react";
+import { useAuth } from "@/context/AuthContext";
+import { useRouter } from "next/navigation";
+import { db } from "@/lib/firebase";
+import { collection, doc, onSnapshot, query } from "firebase/firestore";
+import MenuCard from "@/components/MenuCard";
+import { useCart } from "@/context/CartContext";
+import Link from "next/link";
 
-export default function Home() {
+interface MenuItem {
+  id: string;
+  name: string;
+  price: number;
+  category: string;
+  available: boolean;
+  quantity: number;
+  preparationTime?: number;
+  image?: string;
+  description?: string;
+}
+
+interface CanteenConfig {
+  isOpen: boolean;
+  startTime: string;
+  endTime: string;
+}
+
+const CATEGORIES = ["all", "meals", "snacks", "beverages", "desserts", "other"];
+
+export default function MenuPage() {
+  const { user, profile, loading } = useAuth();
+  const { itemCount, total } = useCart();
+  const router = useRouter();
+  const [menuItems, setMenuItems] = useState<MenuItem[]>([]);
+  const [search, setSearch] = useState("");
+  const [category, setCategory] = useState("all");
+  const [menuLoading, setMenuLoading] = useState(true);
+  const [canteenConfig, setCanteenConfig] = useState<CanteenConfig | null>(null);
+
+  useEffect(() => {
+    if (!loading && !user) {
+      router.push("/auth");
+    }
+  }, [user, loading, router]);
+
+  // Real-time Firestore subscription for menu
+  useEffect(() => {
+    const q = query(collection(db, "menuItems"));
+    const unsubscribe = onSnapshot(q, (snapshot) => {
+      const items = snapshot.docs.map((d) => ({
+        id: d.id,
+        ...d.data(),
+      })) as MenuItem[];
+      setMenuItems(items);
+      setMenuLoading(false);
+    });
+    return () => unsubscribe();
+  }, []);
+
+  // Real-time canteen config subscription
+  useEffect(() => {
+    const unsub = onSnapshot(doc(db, "settings", "canteenConfig"), (snap) => {
+      if (snap.exists()) {
+        setCanteenConfig(snap.data() as CanteenConfig);
+      }
+    });
+    return () => unsub();
+  }, []);
+
+  // Compute minutes until canteen closes
+  const getMinutesUntilClose = (): number | null => {
+    if (!canteenConfig?.endTime) return null;
+    const now = new Date();
+    const [h, m] = canteenConfig.endTime.split(":").map(Number);
+    const closeTime = new Date();
+    closeTime.setHours(h, m, 0, 0);
+    const diff = (closeTime.getTime() - now.getTime()) / 60000;
+    return Math.max(0, Math.round(diff));
+  };
+
+  const minutesUntilClose = getMinutesUntilClose();
+  const isCanteenOpen = canteenConfig?.isOpen !== false;
+
+  const filteredItems = menuItems.filter((item) => {
+    const matchesSearch = item.name.toLowerCase().includes(search.toLowerCase());
+    const matchesCategory = category === "all" || item.category === category;
+    // Only hide items by prep time if canteen is open AND closing soon
+    const canPrepare = !item.preparationTime
+      || minutesUntilClose === null
+      || minutesUntilClose === 0
+      || item.preparationTime <= minutesUntilClose;
+    return matchesSearch && matchesCategory && canPrepare;
+  });
+
+  const availableCount = menuItems.filter((i) => i.available).length;
+
+  if (loading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="w-12 h-12 border-4 border-campus-500 border-t-transparent rounded-full animate-spin"></div>
+      </div>
+    );
+  }
+
+  if (!user) return null;
+
   return (
-    <div className="flex min-h-screen items-center justify-center bg-zinc-50 font-sans dark:bg-black">
-      <main className="flex min-h-screen w-full max-w-3xl flex-col items-center justify-between py-32 px-16 bg-white dark:bg-black sm:items-start">
-        <Image
-          className="dark:invert"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={100}
-          height={20}
-          priority
-        />
-        <div className="flex flex-col items-center gap-6 text-center sm:items-start sm:text-left">
-          <h1 className="max-w-xs text-3xl font-semibold leading-10 tracking-tight text-black dark:text-zinc-50">
-            To get started, edit the page.tsx file.
-          </h1>
-          <p className="max-w-md text-lg leading-8 text-zinc-600 dark:text-zinc-400">
-            Looking for a starting point or more instructions? Head over to{" "}
-            <a
-              href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Templates
-            </a>{" "}
-            or the{" "}
-            <a
-              href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Learning
-            </a>{" "}
-            center.
-          </p>
+    <div className="min-h-screen bg-gray-50">
+      {/* Canteen Closed Banner */}
+      {!isCanteenOpen && (
+        <div className="bg-red-500 text-white text-center py-3 px-4 font-bold text-sm animate-fade-in">
+          🔴 The canteen is currently closed. Orders are not being accepted right now.
         </div>
-        <div className="flex flex-col gap-4 text-base font-medium sm:flex-row">
-          <a
-            className="flex h-12 w-full items-center justify-center gap-2 rounded-full bg-foreground px-5 text-background transition-colors hover:bg-[#383838] dark:hover:bg-[#ccc] md:w-[158px]"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={16}
-              height={16}
+      )}
+
+      {/* Closing Soon Warning */}
+      {isCanteenOpen && minutesUntilClose !== null && minutesUntilClose <= 30 && minutesUntilClose > 0 && (
+        <div className="bg-amber-500 text-white text-center py-2 px-4 font-semibold text-sm">
+          ⚠️ Canteen closing in {minutesUntilClose} minutes — some items may be unavailable
+        </div>
+      )}
+
+      {/* Hero Section */}
+      <div className="gradient-primary text-white">
+        <div className="page-container py-8 sm:py-12">
+          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+            <div className="animate-fade-in">
+              <h1 className="text-3xl sm:text-4xl font-display font-bold">
+                Hey {profile?.name?.split(" ")[0] || "there"}! 👋
+              </h1>
+              <p className="text-campus-200 mt-1">What are you craving today?</p>
+            </div>
+            <div className="flex items-center gap-3">
+              <div className="bg-white/10 backdrop-blur-xl rounded-2xl px-4 py-3 text-sm">
+                <span className="text-campus-200">Wallet:</span>{" "}
+                <span className="font-bold text-gold-300">₹{profile?.walletBalance || 0}</span>
+              </div>
+              <div className="bg-white/10 backdrop-blur-xl rounded-2xl px-4 py-3 text-sm">
+                🟢 {availableCount} items available
+              </div>
+            </div>
+          </div>
+
+          {/* Search Bar */}
+          <div className="mt-6 relative">
+            <input
+              type="text"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="🔍 Search for dishes..."
+              className="w-full px-5 py-4 rounded-2xl bg-white/10 backdrop-blur-xl border border-white/20 text-white placeholder:text-campus-300 focus:outline-none focus:ring-2 focus:ring-gold-400 text-lg"
             />
-            Deploy Now
-          </a>
-          <a
-            className="flex h-12 w-full items-center justify-center rounded-full border border-solid border-black/[.08] px-5 transition-colors hover:border-transparent hover:bg-black/[.04] dark:border-white/[.145] dark:hover:bg-[#1a1a1a] md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Documentation
-          </a>
+          </div>
+
+          {/* Category Filters */}
+          <div className="mt-4 flex gap-2 overflow-x-auto pb-2 scrollbar-hide">
+            {CATEGORIES.map((cat) => (
+              <button
+                key={cat}
+                onClick={() => setCategory(cat)}
+                className={`px-4 py-2 rounded-xl text-sm font-medium whitespace-nowrap capitalize transition-all ${category === cat
+                  ? "bg-gold-400 text-campus-900 shadow-gold-glow"
+                  : "bg-white/10 text-white hover:bg-white/20"
+                  }`}
+              >
+                {cat === "all" ? "🍽️ All" : cat === "meals" ? "🍱 Meals" : cat === "snacks" ? "🍿 Snacks" : cat === "beverages" ? "☕ Beverages" : cat === "desserts" ? "🍰 Desserts" : "📦 Other"}
+              </button>
+            ))}
+          </div>
         </div>
-      </main>
+      </div>
+
+      {/* Menu Grid */}
+      <div className="page-container -mt-2">
+        {menuLoading ? (
+          <div className="flex items-center justify-center py-20">
+            <div className="text-center">
+              <div className="w-12 h-12 border-4 border-campus-500 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
+              <p className="text-gray-500">Loading menu...</p>
+            </div>
+          </div>
+        ) : filteredItems.length === 0 ? (
+          <div className="text-center py-20 animate-fade-in">
+            <div className="text-6xl mb-4">🍽️</div>
+            <h3 className="text-xl font-display font-bold text-gray-700 mb-2">No items found</h3>
+            <p className="text-gray-500">
+              {search ? `No results for "${search}"` : "The menu is empty right now"}
+            </p>
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6 animate-fade-in">
+            {filteredItems.map((item) => (
+              <MenuCard key={item.id} {...item} />
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* Floating Cart Bar */}
+      {itemCount > 0 && (
+        <div className="fixed bottom-4 left-4 right-4 sm:left-auto sm:right-6 sm:w-auto z-40 animate-slide-up">
+          <Link
+            href="/cart"
+            className="flex items-center justify-between gap-4 bg-campus-500 text-white px-6 py-4 rounded-2xl shadow-2xl hover:shadow-glow transition-all hover:scale-[1.02]"
+          >
+            <div className="flex items-center gap-3">
+              <span className="bg-white/20 w-10 h-10 rounded-xl flex items-center justify-center text-lg">
+                🛒
+              </span>
+              <div>
+                <p className="font-bold">{itemCount} item{itemCount > 1 ? "s" : ""}</p>
+                <p className="text-xs text-campus-200">View your cart</p>
+              </div>
+            </div>
+            <span className="font-display font-bold text-lg text-gold-300">₹{total}</span>
+          </Link>
+        </div>
+      )}
     </div>
   );
 }
