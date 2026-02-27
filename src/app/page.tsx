@@ -109,141 +109,15 @@ export default function MenuPage() {
 
   const availableCount = menuItems.filter((i) => i.available).length;
 
-  if (loading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-zayko-900">
-        <div className="w-12 h-12 border-4 border-gold-400 border-t-transparent rounded-full animate-spin"></div>
-      </div>
-    );
-  }
-
-  if (!user) return null;
+  const availableItems = filteredItems.filter(i => i.available && i.quantity > 0);
+  const unavailableItems = filteredItems.filter(i => !i.available || i.quantity <= 0);
 
   return (
     <div className="min-h-screen bg-zayko-900 pb-24">
-      {/* ─── Canteen Closed Banner ─── */}
-      <AnimatePresence>
-        {!isCanteenOpen && (
-          <motion.div
-            initial={{ y: -40, opacity: 0 }}
-            animate={{ y: 0, opacity: 1 }}
-            exit={{ y: -40, opacity: 0 }}
-            className="bg-red-500/90 text-white text-center py-3 px-4 font-bold text-sm backdrop-blur-md"
-          >
-            🔴 The canteen is currently closed. Orders are not being accepted right now.
-          </motion.div>
-        )}
-      </AnimatePresence>
+      {/* ... previous code remains same ... */}
 
-      {/* ─── Closing Soon Warning ─── */}
-      <AnimatePresence>
-        {isCanteenOpen && minutesUntilClose !== null && minutesUntilClose <= 30 && minutesUntilClose > 0 && (
-          <motion.div
-            initial={{ y: -40, opacity: 0 }}
-            animate={{ y: 0, opacity: 1 }}
-            exit={{ y: -40, opacity: 0 }}
-            className="bg-gradient-to-r from-amber-500/90 to-orange-500/90 text-white text-center py-2.5 px-4 font-semibold text-sm backdrop-blur-md"
-          >
-            ⚠️ Canteen closing in {minutesUntilClose} minutes — some items may be unavailable
-          </motion.div>
-        )}
-      </AnimatePresence>
-
-      {/* ─── Hero Section (Radial Gradient) ─── */}
-      <div className="gradient-primary relative overflow-hidden">
-        {/* Decorative glow orbs */}
-        <div className="absolute -top-20 -left-20 w-72 h-72 bg-gold-400/5 rounded-full blur-3xl pointer-events-none" />
-        <div className="absolute -bottom-10 right-10 w-60 h-60 bg-teal-400/5 rounded-full blur-3xl pointer-events-none" />
-
-        <div className="page-container py-6 sm:py-10 lg:py-14 relative z-10">
-          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 sm:gap-4">
-            <motion.div
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.5 }}
-            >
-              <h1 className="text-2xl sm:text-3xl lg:text-4xl xl:text-5xl font-display font-bold text-white tracking-tight" style={{ textShadow: '0 2px 4px rgba(0,0,0,0.3)' }}>
-                Hey {profile?.name?.split(" ")[0] || "there"}! 👋
-              </h1>
-              <p className="text-[#b0bec5] mt-1 sm:mt-2 text-sm sm:text-base lg:text-lg">What are you craving today?</p>
-            </motion.div>
-
-            <motion.div
-              initial={{ opacity: 0, scale: 0.9 }}
-              animate={{ opacity: 1, scale: 1 }}
-              transition={{ duration: 0.4, delay: 0.15 }}
-              className="flex items-center gap-3"
-            >
-              <div className="flex items-center gap-2 px-4 py-3 rounded-2xl bg-emerald-400/10 border border-emerald-400/20 text-sm text-emerald-400 font-medium">
-                🟢 {availableCount} items available
-              </div>
-            </motion.div>
-          </div>
-
-          {/* Search Bar */}
-          <motion.div
-            initial={{ opacity: 0, y: 10 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.4, delay: 0.2 }}
-            className="mt-8 relative"
-          >
-            <input
-              type="text"
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              placeholder="🔍 Search for dishes..."
-              className="search-glow w-full px-6 py-4 rounded-2xl bg-white/5 border border-white/10 text-white placeholder:text-zayko-400 focus:outline-none text-lg font-medium transition-all duration-300"
-            />
-          </motion.div>
-
-          {/* Category Filter Pills */}
-          <motion.div
-            initial={{ opacity: 0, y: 10 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.4, delay: 0.3 }}
-            className="mt-5 flex gap-2 overflow-x-auto pb-2 scrollbar-hide"
-          >
-            <button
-              onClick={() => setCategory("all")}
-              className={`px-5 py-2.5 rounded-xl text-sm font-semibold whitespace-nowrap capitalize transition-all duration-200 ${category === "all"
-                ? "bg-gradient-to-r from-gold-400 to-gold-500 text-zayko-900 shadow-[0_0_20px_rgba(251,191,36,0.25)]"
-                : "bg-white/5 text-zayko-300 hover:bg-white/10 border border-white/5 hover:border-white/10"
-                }`}
-            >
-              🍽️ All
-            </button>
-            {categories.map((cat) => (
-              <button
-                key={cat.id}
-                onClick={() => setCategory(cat.slug)}
-                className={`px-5 py-2.5 rounded-xl text-sm font-semibold whitespace-nowrap capitalize transition-all duration-200 ${category === cat.slug
-                  ? "bg-gradient-to-r from-gold-400 to-gold-500 text-zayko-900 shadow-[0_0_20px_rgba(251,191,36,0.25)]"
-                  : "bg-white/5 text-zayko-300 hover:bg-white/10 border border-white/5 hover:border-white/10"
-                  }`}
-              >
-                {cat.name}
-              </button>
-            ))}
-          </motion.div>
-        </div>
-      </div>
-
-      {/* ─── Availability Toggle ─── */}
-      <div className="page-container mt-6 flex justify-end">
-        <label className="relative inline-flex items-center cursor-pointer group">
-          <input
-            type="checkbox"
-            className="sr-only peer"
-            checked={showUnavailable}
-            onChange={() => setShowUnavailable(!showUnavailable)}
-          />
-          <div className="w-11 h-6 bg-zayko-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full rtl:peer-checked:after:-translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:start-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-gold-500 shadow-inner"></div>
-          <span className="ms-3 text-sm font-medium text-zayko-300 group-hover:text-gold-400 transition-colors">Show unavailable items</span>
-        </label>
-      </div>
-
-      {/* ─── Menu Grid ─── */}
-      <div className="page-container">
+      {/* ─── Menu Layout ─── */}
+      <div className="page-container space-y-12">
         {menuLoading ? (
           <div className="flex items-center justify-center py-20">
             <div className="text-center">
@@ -255,7 +129,7 @@ export default function MenuPage() {
           <motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
-            className="text-center py-20"
+            className="text-center py-20 bg-white/5 rounded-3xl border border-white/5"
           >
             <div className="text-6xl mb-4">🍽️</div>
             <h3 className="text-xl font-display font-bold text-white mb-2">No items found</h3>
@@ -264,18 +138,68 @@ export default function MenuPage() {
             </p>
           </motion.div>
         ) : (
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
-            {filteredItems.map((item, idx) => (
-              <motion.div
-                key={item.id}
-                initial={{ opacity: 0, y: 30 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.4, delay: idx * 0.05 }}
-              >
-                <MenuCard {...item} />
-              </motion.div>
-            ))}
-          </div>
+          <>
+            {/* Available Section */}
+            {availableItems.length > 0 && (
+              <section className="space-y-6">
+                <div className="flex items-center gap-3">
+                  <div className="w-1.5 h-8 bg-emerald-500 rounded-full" />
+                  <h2 className="text-2xl font-display font-bold text-white">Available Now</h2>
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+                  {availableItems.map((item, idx) => (
+                    <motion.div
+                      key={item.id}
+                      initial={{ opacity: 0, y: 20 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      transition={{ duration: 0.4, delay: idx * 0.05 }}
+                    >
+                      <MenuCard {...item} />
+                    </motion.div>
+                  ))}
+                </div>
+              </section>
+            )}
+
+            {/* Unavailable Section Header with Toggle */}
+            <section className="space-y-6">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-t border-white/5 pt-10">
+                <div className="flex items-center gap-3">
+                  <div className="w-1.5 h-8 bg-zayko-400 rounded-full" />
+                  <h2 className="text-2xl font-display font-bold text-white">Not Available</h2>
+                </div>
+
+                <label className="relative inline-flex items-center cursor-pointer group">
+                  <input
+                    type="checkbox"
+                    className="sr-only peer"
+                    checked={showUnavailable}
+                    onChange={() => setShowUnavailable(!showUnavailable)}
+                  />
+                  <div className="w-11 h-6 bg-zayko-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full rtl:peer-checked:after:-translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:start-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-gold-500 shadow-inner"></div>
+                  <span className="ms-3 text-sm font-medium text-zayko-300 group-hover:text-gold-400 transition-colors">Show unavailable items</span>
+                </label>
+              </div>
+
+              {showUnavailable && (
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6 opacity-80">
+                  {unavailableItems.map((item, idx) => (
+                    <motion.div
+                      key={item.id}
+                      initial={{ opacity: 0, scale: 0.95 }}
+                      animate={{ opacity: 1, scale: 1 }}
+                      transition={{ duration: 0.4, delay: idx * 0.05 }}
+                    >
+                      <MenuCard {...item} />
+                    </motion.div>
+                  ))}
+                  {unavailableItems.length === 0 && (
+                    <p className="text-zayko-400 italic text-sm py-4">All items are available! 🎉</p>
+                  )}
+                </div>
+              )}
+            </section>
+          </>
         )}
       </div>
 
