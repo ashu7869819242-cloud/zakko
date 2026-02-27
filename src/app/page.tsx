@@ -8,6 +8,7 @@ import MenuCard from "@/components/MenuCard";
 import { useCart } from "@/context/CartContext";
 import Link from "next/link";
 import { motion, AnimatePresence } from "framer-motion";
+import JarvisChat from "@/components/JarvisChat";
 
 interface MenuItem {
   id: string;
@@ -320,6 +321,9 @@ export default function MenuPage() {
           </motion.div>
         )}
       </AnimatePresence>
+
+      {/* Jarvis AI Assistant */}
+      <JarvisChat />
     </div>
   );
 }
