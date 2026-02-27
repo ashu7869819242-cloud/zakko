@@ -17,7 +17,6 @@ export default function Navbar() {
         { href: "/", label: "Menu", icon: "🍽️" },
         { href: "/cart", label: "Cart", icon: "🛒", badge: itemCount },
         { href: "/orders", label: "Orders", icon: "📋" },
-        { href: "/auto-orders", label: "Auto Orders", icon: "🔄" },
         { href: "/wallet", label: "Wallet", icon: "💰" },
     ];
 
