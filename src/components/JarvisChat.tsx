@@ -1,53 +1,39 @@
 "use client";
 import React, { useState, useRef, useEffect, useCallback } from "react";
 import { useAuth } from "@/context/AuthContext";
-import { db } from "@/lib/firebase";
-import { collection, onSnapshot, query } from "firebase/firestore";
-import { parseNaturalLanguage, fuzzyMatchItem, ParsedItem } from "@/lib/jarvis-parser";
+import { useCart } from "@/context/CartContext";
 import { motion, AnimatePresence } from "framer-motion";
-import { auth } from "@/lib/firebase";
-
-interface MenuItem {
-    id: string;
-    name: string;
-    price: number;
-    category: string;
-    available: boolean;
-    quantity: number;
-}
+import toast from "react-hot-toast";
 
 interface ChatMessage {
-    role: "jarvis" | "user";
-    text: string;
+    role: "assistant" | "user" | "system";
+    content: string;
     timestamp: number;
 }
 
 export default function JarvisChat() {
-    const { user, profile } = useAuth();
+    const { user, profile, getIdToken } = useAuth();
+    const { items, total, clearCart } = useCart();
     const [open, setOpen] = useState(false);
     const [messages, setMessages] = useState<ChatMessage[]>([]);
     const [input, setInput] = useState("");
     const [processing, setProcessing] = useState(false);
-    const [menuItems, setMenuItems] = useState<MenuItem[]>([]);
     const messagesEndRef = useRef<HTMLDivElement>(null);
     const inputRef = useRef<HTMLInputElement>(null);
 
-    // Load menu items in real-time
-    useEffect(() => {
-        const q = query(collection(db, "menuItems"));
-        const unsub = onSnapshot(q, (snap) => {
-            setMenuItems(snap.docs.map(d => ({ id: d.id, ...d.data() })) as MenuItem[]);
-        });
-        return () => unsub();
-    }, []);
-
-    // Greeting on open
+    // Initial Greeting
     useEffect(() => {
         if (open && messages.length === 0) {
-            const name = profile?.name?.split(" ")[0] || "there";
-            addJarvisMessage(`Hey ${name}! 👋 Bataiye kya order karu? \n\nAap naturally bol sakte ho jaise:\n• "2 momos add karo"\n• "milk 1 packet de do"\n• "1 boil egg aur 2 upma"`);
+            const firstName = profile?.name?.split(" ")[0] || "Buddy";
+            setMessages([
+                {
+                    role: "assistant",
+                    content: `Namaste ${firstName}! 🙏 Main hoon Jarvis, aapka personal Zayko AI Assistant.\n\nAap mujhse canteen ke baare mein kuch bhi pooch sakte hain Hinglish mein, jaise:\n• "Aaj menu mein kya hai?"\n• "Mera wallet balance kya hai?"\n• "1 tea aur 2 samosa order kar do."`,
+                    timestamp: Date.now(),
+                },
+            ]);
         }
-    }, [open, profile]);
+    }, [open, profile, messages.length]);
 
     // Auto scroll
     useEffect(() => {
@@ -56,130 +42,55 @@ export default function JarvisChat() {
 
     // Focus input on open
     useEffect(() => {
-        if (open) setTimeout(() => inputRef.current?.focus(), 200);
+        if (open) {
+            setTimeout(() => inputRef.current?.focus(), 300);
+        }
     }, [open]);
 
-    const addJarvisMessage = useCallback((text: string) => {
-        setMessages(prev => [...prev, { role: "jarvis", text, timestamp: Date.now() }]);
-    }, []);
-
-    const addUserMessage = useCallback((text: string) => {
-        setMessages(prev => [...prev, { role: "user", text, timestamp: Date.now() }]);
-    }, []);
-
-    const handleSend = async () => {
+    const handleSend = async (action?: string) => {
         const text = input.trim();
-        if (!text || processing) return;
+        if ((!text && !action) || processing) return;
+
+        const userMsg = text || (action === "confirm_order" ? "Confirm Order" : "");
+        if (userMsg) {
+            setMessages(prev => [...prev, { role: "user", content: userMsg, timestamp: Date.now() }]);
+        }
 
         setInput("");
-        addUserMessage(text);
         setProcessing(true);
 
         try {
-            // 1. Parse natural language
-            const parsed = parseNaturalLanguage(text);
-
-            if (parsed.length === 0) {
-                addJarvisMessage("🤔 Samajh nahi aaya. Kuch aisa boliye:\n\"2 momos add karo\" ya \"milk 1 de do\"");
-                setProcessing(false);
-                return;
-            }
-
-            // 2. Match parsed items against menu
-            const matchedItems: { menuItem: MenuItem; quantity: number; parsed: ParsedItem }[] = [];
-            const notFound: string[] = [];
-
-            for (const p of parsed) {
-                const available = menuItems.filter(m => m.available && m.quantity > 0);
-                const match = fuzzyMatchItem(p.rawName, available);
-
-                if (match) {
-                    // Check if quantity is available
-                    if (p.quantity > match.quantity) {
-                        addJarvisMessage(
-                            `⚠️ **${match.name}** mein sirf ${match.quantity} available hai, aapne ${p.quantity} maanga. Kam quantity try karo!`
-                        );
-                        setProcessing(false);
-                        return;
-                    }
-                    matchedItems.push({ menuItem: match, quantity: p.quantity, parsed: p });
-                } else {
-                    notFound.push(p.rawName);
-                }
-            }
-
-            if (notFound.length > 0 && matchedItems.length === 0) {
-                addJarvisMessage(
-                    `❌ "${notFound.join(", ")}" menu mein nahi mila. Available items check karo menu se!`
-                );
-                setProcessing(false);
-                return;
-            }
-
-            if (notFound.length > 0) {
-                addJarvisMessage(
-                    `⚠️ "${notFound.join(", ")}" nahi mila, baaki items order kar raha hu...`
-                );
-            }
-
-            // 3. Calculate total
-            const total = matchedItems.reduce((sum, m) => sum + m.menuItem.price * m.quantity, 0);
-            const walletBalance = profile?.walletBalance || 0;
-
-            if (walletBalance < total) {
-                addJarvisMessage(
-                    `💳 Wallet balance insufficient!\nOrder total: ₹${total}\nWallet: ₹${walletBalance}\n\nPehle wallet recharge karo.`
-                );
-                setProcessing(false);
-                return;
-            }
-
-            // 4. Show confirmation preview
-            const itemLines = matchedItems
-                .map(m => `  • ${m.menuItem.name} × ${m.quantity} = ₹${m.menuItem.price * m.quantity}`)
-                .join("\n");
-
-            addJarvisMessage(
-                `🛒 Order ready:\n${itemLines}\n\n💰 Total: ₹${total}\n\nPlacing order...`
-            );
-
-            // 5. Place order via existing API
-            const token = await auth.currentUser?.getIdToken();
-            const orderItems = matchedItems.map(m => ({
-                id: m.menuItem.id,
-                name: m.menuItem.name,
-                price: m.menuItem.price,
-                quantity: m.quantity,
-                category: m.menuItem.category,
-            }));
-
-            const res = await fetch("/api/orders", {
+            const token = await getIdToken();
+            const res = await fetch("/api/chat", {
                 method: "POST",
                 headers: {
                     "Content-Type": "application/json",
                     Authorization: `Bearer ${token}`,
                 },
                 body: JSON.stringify({
-                    userId: user?.uid,
-                    items: orderItems,
-                    total,
-                    userName: profile?.name || "Unknown",
-                    userEmail: user?.email || "Unknown",
+                    messages: messages.concat(userMsg ? [{ role: "user", content: userMsg, timestamp: Date.now() }] : []),
+                    cart: items,
+                    userProfile: profile,
+                    action: action || "chat"
                 }),
             });
 
             const data = await res.json();
-
             if (res.ok) {
-                addJarvisMessage(
-                    `✅ Order placed successfully! 🎉\n\n🆔 Order ID: #${data.orderId}\n💰 ₹${total} deducted from wallet\n\nAapka order jaldi ready hoga! 🍽️`
-                );
+                setMessages(prev => [...prev, { role: "assistant", content: data.message, timestamp: Date.now() }]);
+
+                // If the AI confirms the order, we might need a special UI or action
+                if (data.action === "order_placed") {
+                    toast.success("Order placed via AI! 🎉");
+                    clearCart();
+                }
             } else {
-                addJarvisMessage(`❌ Order fail: ${data.error || "Unknown error"}\n\nDubara try karo!`);
+                toast.error(data.error || "AI is taking a break...");
+                setMessages(prev => [...prev, { role: "assistant", content: "Sorry, server side kuch issue hai. Kripya bad mein try karein! 🙏", timestamp: Date.now() }]);
             }
         } catch (err) {
-            console.error("Jarvis order error:", err);
-            addJarvisMessage("⚠️ Kuch gadbad ho gayi. Dubara try karo!");
+            console.error("Jarvis Error:", err);
+            toast.error("Connection lost");
         } finally {
             setProcessing(false);
         }
@@ -199,67 +110,79 @@ export default function JarvisChat() {
             {/* Floating Trigger Button */}
             <motion.button
                 onClick={() => setOpen(!open)}
-                className="fixed bottom-6 right-6 z-50 w-14 h-14 rounded-full bg-gradient-to-br from-gold-400 to-gold-500 text-zayko-900 shadow-[0_5px_30px_rgba(251,191,36,0.4)] flex items-center justify-center text-2xl hover:scale-110 active:scale-95 transition-transform"
+                className="fixed bottom-24 right-4 z-50 w-14 h-14 rounded-full bg-gradient-to-br from-gold-400 to-gold-600 text-zayko-950 shadow-[0_8px_30px_rgba(251,191,36,0.4)] flex items-center justify-center text-3xl hover:scale-110 active:scale-95 transition-all border border-white/20"
                 whileTap={{ scale: 0.9 }}
-                title="Jarvis AI Assistant"
+                initial={{ scale: 0, opacity: 0 }}
+                animate={{ scale: 1, opacity: 1 }}
             >
-                {open ? "✕" : "🤖"}
+                {open ? (
+                    <span className="text-xl">✕</span>
+                ) : (
+                    <motion.span
+                        animate={{
+                            rotate: [0, -10, 10, -10, 10, 0],
+                        }}
+                        transition={{ repeat: Infinity, duration: 4, repeatDelay: 2 }}
+                    >
+                        🤖
+                    </motion.span>
+                )}
+                {/* Notification Badge if needed */}
+                <div className="absolute -top-1 -right-1 w-4 h-4 bg-emerald-500 rounded-full border-2 border-zayko-900 animate-pulse"></div>
             </motion.button>
 
             {/* Chat Panel */}
             <AnimatePresence>
                 {open && (
                     <motion.div
-                        initial={{ opacity: 0, y: 30, scale: 0.95 }}
+                        initial={{ opacity: 0, y: 30, scale: 0.9, transformOrigin: "bottom right" }}
                         animate={{ opacity: 1, y: 0, scale: 1 }}
-                        exit={{ opacity: 0, y: 30, scale: 0.95 }}
-                        transition={{ duration: 0.25, ease: [0.4, 0, 0.2, 1] }}
-                        className="fixed bottom-24 right-4 sm:right-6 z-50 w-[calc(100vw-2rem)] sm:w-[400px] max-h-[70vh] flex flex-col rounded-2xl overflow-hidden border border-white/10 shadow-[0_20px_60px_rgba(0,0,0,0.6)] bg-[rgba(10,22,40,0.95)] backdrop-blur-xl"
+                        exit={{ opacity: 0, y: 30, scale: 0.9 }}
+                        className="fixed bottom-40 right-4 left-4 sm:left-auto sm:right-6 z-50 sm:w-[380px] h-[550px] max-h-[80vh] flex flex-col rounded-3xl overflow-hidden border border-white/[0.08] shadow-[0_32px_64px_rgba(0,0,0,0.6)] bg-zayko-900/90 backdrop-blur-2xl"
                     >
                         {/* Header */}
-                        <div className="flex items-center gap-3 px-5 py-4 border-b border-white/10 bg-gradient-to-r from-gold-500/10 to-transparent">
-                            <div className="w-10 h-10 rounded-full bg-gradient-to-br from-gold-400 to-gold-500 flex items-center justify-center text-xl shadow-lg">
-                                🤖
+                        <div className="px-6 py-5 border-b border-white/[0.06] bg-gradient-to-r from-gold-400/10 to-transparent flex items-center justify-between">
+                            <div className="flex items-center gap-3">
+                                <div className="relative">
+                                    <div className="w-11 h-11 rounded-2xl bg-gradient-to-br from-gold-400 to-gold-600 flex items-center justify-center text-2xl shadow-lg shadow-gold-500/20">
+                                        🤖
+                                    </div>
+                                    <span className="absolute -bottom-0.5 -right-0.5 w-3 h-3 bg-emerald-500 border-2 border-zayko-900 rounded-full"></span>
+                                </div>
+                                <div>
+                                    <h3 className="font-display font-black text-white text-base tracking-tight italic">JARVIS <span className="text-[10px] bg-gold-400/20 text-gold-400 px-1.5 py-0.5 rounded ml-1 not-italic">AI</span></h3>
+                                    <p className="text-[10px] text-emerald-400 font-bold uppercase tracking-widest leading-none mt-1">Ready to assist</p>
+                                </div>
                             </div>
-                            <div className="flex-1">
-                                <h3 className="font-display font-bold text-white text-sm">Jarvis</h3>
-                                <p className="text-xs text-emerald-400">● Online — AI Assistant</p>
-                            </div>
-                            <button
-                                onClick={() => setOpen(false)}
-                                className="text-zayko-400 hover:text-white transition-colors text-xl"
-                            >
-                                ✕
-                            </button>
+                            <button onClick={() => setOpen(false)} className="w-8 h-8 rounded-full bg-white/5 flex items-center justify-center text-zayko-400 hover:text-white transition-colors">✕</button>
                         </div>
 
-                        {/* Messages */}
-                        <div className="flex-1 overflow-y-auto px-4 py-4 space-y-3 min-h-[200px] max-h-[50vh]">
+                        {/* Chat Messages */}
+                        <div className="flex-1 overflow-y-auto p-5 space-y-4 scrollbar-hide">
                             {messages.map((msg, i) => (
                                 <motion.div
                                     key={i}
-                                    initial={{ opacity: 0, y: 10 }}
-                                    animate={{ opacity: 1, y: 0 }}
-                                    transition={{ duration: 0.2 }}
+                                    initial={{ opacity: 0, x: msg.role === "user" ? 20 : -20 }}
+                                    animate={{ opacity: 1, x: 0 }}
                                     className={`flex ${msg.role === "user" ? "justify-end" : "justify-start"}`}
                                 >
-                                    <div
-                                        className={`max-w-[85%] px-4 py-3 rounded-2xl text-sm leading-relaxed whitespace-pre-wrap ${msg.role === "user"
-                                            ? "bg-gold-500/20 text-gold-100 border border-gold-500/20 rounded-br-md"
-                                            : "bg-white/5 text-zayko-200 border border-white/5 rounded-bl-md"
-                                            }`}
-                                    >
-                                        {msg.text}
+                                    <div className={`max-w-[85%] px-4 py-3 rounded-2xl text-[13px] leading-relaxed shadow-sm ${msg.role === "user"
+                                            ? "bg-gold-500 text-zayko-950 font-bold rounded-tr-sm"
+                                            : "bg-white/5 border border-white/[0.08] text-zayko-100 rounded-tl-sm"
+                                        }`}>
+                                        {msg.content.split("\n").map((line, idx) => (
+                                            <p key={idx} className={idx > 0 ? "mt-1" : ""}>{line}</p>
+                                        ))}
                                     </div>
                                 </motion.div>
                             ))}
                             {processing && (
                                 <div className="flex justify-start">
-                                    <div className="bg-white/5 border border-white/5 px-4 py-3 rounded-2xl rounded-bl-md">
+                                    <div className="bg-white/5 border border-white/[0.08] px-4 py-3 rounded-2xl rounded-tl-sm">
                                         <div className="flex items-center gap-1.5">
-                                            <span className="w-2 h-2 bg-gold-400 rounded-full animate-bounce" style={{ animationDelay: "0ms" }} />
-                                            <span className="w-2 h-2 bg-gold-400 rounded-full animate-bounce" style={{ animationDelay: "150ms" }} />
-                                            <span className="w-2 h-2 bg-gold-400 rounded-full animate-bounce" style={{ animationDelay: "300ms" }} />
+                                            <span className="w-1.5 h-1.5 bg-gold-400 rounded-full animate-bounce" style={{ animationDelay: "0ms" }}></span>
+                                            <span className="w-1.5 h-1.5 bg-gold-400 rounded-full animate-bounce" style={{ animationDelay: "150ms" }}></span>
+                                            <span className="w-1.5 h-1.5 bg-gold-400 rounded-full animate-bounce" style={{ animationDelay: "300ms" }}></span>
                                         </div>
                                     </div>
                                 </div>
@@ -267,27 +190,30 @@ export default function JarvisChat() {
                             <div ref={messagesEndRef} />
                         </div>
 
-                        {/* Input */}
-                        <div className="px-4 py-3 border-t border-white/10 bg-zayko-900/50">
-                            <div className="flex items-center gap-2">
+                        {/* Input Area */}
+                        <div className="p-4 bg-zayko-800/50 border-t border-white/[0.06]">
+                            <div className="relative group">
                                 <input
                                     ref={inputRef}
                                     type="text"
                                     value={input}
                                     onChange={(e) => setInput(e.target.value)}
                                     onKeyDown={handleKeyDown}
-                                    placeholder="e.g. 2 momos aur 1 milk..."
+                                    placeholder="Order 2 masala dosa..."
+                                    className="w-full bg-white/5 border border-white/[0.1] rounded-2xl py-4 pl-5 pr-14 text-white text-sm focus:outline-none focus:ring-2 focus:ring-gold-400/30 transition-all placeholder:text-zayko-600 font-medium"
                                     disabled={processing}
-                                    className="flex-1 px-4 py-3 rounded-xl bg-white/5 border border-white/10 text-white placeholder:text-zayko-500 text-sm focus:outline-none focus:ring-2 focus:ring-gold-400/50 focus:border-gold-400/50 disabled:opacity-50 transition-all"
                                 />
                                 <button
-                                    onClick={handleSend}
+                                    onClick={() => handleSend()}
                                     disabled={processing || !input.trim()}
-                                    className="p-3 rounded-xl bg-gradient-to-r from-gold-400 to-gold-500 text-zayko-900 font-bold hover:shadow-[0_0_20px_rgba(251,191,36,0.3)] disabled:opacity-40 transition-all active:scale-95"
+                                    className="absolute right-2 top-1/2 -translate-y-1/2 w-10 h-10 rounded-xl bg-gold-400 text-zayko-900 flex items-center justify-center transition-all active:scale-90 disabled:opacity-30 disabled:grayscale"
                                 >
-                                    ➤
+                                    <svg viewBox="0 0 24 24" className="w-5 h-5 fill-current" xmlns="http://www.w3.org/2000/svg">
+                                        <path d="M2.01 21L23 12L2.01 3L2 10L17 12L2 14L2.01 21Z" />
+                                    </svg>
                                 </button>
                             </div>
+                            <p className="text-[9px] text-center text-zayko-600 mt-3 font-black uppercase tracking-[0.2em]">Powered by Zayko AI Core</p>
                         </div>
                     </motion.div>
                 )}

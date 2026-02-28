@@ -5,6 +5,7 @@ import { CartProvider } from "@/context/CartContext";
 import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
 import MobileBottomNav from "@/components/MobileBottomNav";
+import JarvisChat from "@/components/JarvisChat";
 import { Toaster } from "react-hot-toast";
 import Script from "next/script";
 
@@ -34,6 +35,7 @@ export default function RootLayout({
             <main className="flex-1">{children}</main>
             <Footer />
             <MobileBottomNav />
+            <JarvisChat />
             <Toaster
               position="top-right"
               toastOptions={{

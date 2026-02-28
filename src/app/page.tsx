@@ -328,9 +328,6 @@ export default function MenuPage() {
           </motion.div>
         )}
       </AnimatePresence>
-
-      {/* Jarvis AI Assistant */}
-      <JarvisChat />
     </div>
   );
 }

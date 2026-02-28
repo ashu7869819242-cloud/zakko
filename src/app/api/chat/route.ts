@@ -13,6 +13,7 @@ import { getAuthenticatedUser } from "@/lib/user-auth";
 import { checkRateLimit } from "@/lib/rate-limit";
 import { adminDb } from "@/lib/firebase-admin";
 import { generateOrderId } from "@/lib/orderIdUtils";
+import { FieldValue } from "firebase-admin/firestore";
 
 export const runtime = "nodejs";
 
@@ -353,6 +354,63 @@ Keep it concise and fun with emojis!`;
 
         // ── LLM fallback ──
         const { response, provider } = await chatWithFallback(chatMessages, systemPrompt);
+
+        // EXTRA: If the LLM response contains "successfully placed" and "Order ID", 
+        // OR manually check if action was confirm_order and response is positive.
+        // For now, let's keep it simple: if the client explicitly sends action "confirm_order", 
+        // we execute the order placement if the LLM confirms the intent.
+
+        if (action === "confirm_order" && cart && cart.length > 0) {
+            // Re-generate order ID and place it
+            const orderId = generateId();
+            const total = cart.reduce((sum: number, item: { price: number; quantity: number }) => sum + item.price * item.quantity, 0);
+
+            try {
+                await adminDb.runTransaction(async (transaction) => {
+                    const userRef = adminDb.collection("users").doc(uid);
+                    const userSnap = await transaction.get(userRef);
+                    if (!userSnap.exists) throw new Error("User not found");
+
+                    const walletBalance = userSnap.data()?.walletBalance || 0;
+                    if (walletBalance < total) throw new Error("Insufficient wallet balance");
+
+                    // Deduct wallet
+                    transaction.update(userRef, { walletBalance: FieldValue.increment(-total) });
+
+                    // Create order
+                    const orderRef = adminDb.collection("orders").doc();
+                    transaction.set(orderRef, {
+                        orderId,
+                        userId: uid,
+                        userName: userProfile.name,
+                        userEmail: userProfile.email,
+                        userPhone: userSnap.data()?.phone || "",
+                        items: cart,
+                        total,
+                        status: "pending",
+                        createdAt: new Date().toISOString(),
+                    });
+
+                    // Record transaction
+                    const txnRef = adminDb.collection("walletTransactions").doc();
+                    transaction.set(txnRef, {
+                        userId: uid,
+                        type: "debit",
+                        amount: total,
+                        description: `Jarvis Order #${orderId}`,
+                        createdAt: new Date().toISOString(),
+                    });
+                });
+
+                return NextResponse.json({
+                    message: `✅ Order placed successfully by Jarvis! 🎉\n\n🆔 Order ID: #${orderId}\n💰 ₹${total} deducted from wallet.\n\nAapka order prepare ho raha hai! 🍽️`,
+                    provider: "jarvis-executor",
+                    action: "order_placed"
+                });
+            } catch (err: any) {
+                return NextResponse.json({ message: `❌ Order failed: ${err.message}`, provider: "error" });
+            }
+        }
 
         return NextResponse.json({ message: response, provider });
     } catch (error) {
