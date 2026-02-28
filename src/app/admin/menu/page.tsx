@@ -57,6 +57,7 @@ export default function AdminMenuPage() {
     // Filter state
     const [categoryFilter, setCategoryFilter] = useState<string>("all");
     const [availabilityFilter, setAvailabilityFilter] = useState<AvailabilityFilter>("all");
+    const [searchQuery, setSearchQuery] = useState<string>("");
 
     // Inline quantity editing state
     const [editingQuantity, setEditingQuantity] = useState<string | null>(null);
@@ -100,7 +101,13 @@ export default function AdminMenuPage() {
     // ─── Filtered items (client-side) ─────────────
 
     const filteredItems = useMemo(() => {
+        const needle = searchQuery.trim().toLowerCase();
         return items.filter((item) => {
+            // Search filter — case-insensitive name match
+            if (needle && !item.name.toLowerCase().includes(needle)) {
+                return false;
+            }
+
             // Category filter
             if (categoryFilter !== "all" && item.category !== categoryFilter) {
                 return false;
@@ -116,7 +123,7 @@ export default function AdminMenuPage() {
 
             return true;
         });
-    }, [items, categoryFilter, availabilityFilter]);
+    }, [items, searchQuery, categoryFilter, availabilityFilter]);
 
     // ─── Auth header helper ───────────────────────
 
@@ -408,8 +415,10 @@ export default function AdminMenuPage() {
                     <MenuFilters
                         categoryFilter={categoryFilter}
                         availabilityFilter={availabilityFilter}
+                        searchQuery={searchQuery}
                         onCategoryChange={setCategoryFilter}
                         onAvailabilityChange={setAvailabilityFilter}
+                        onSearchChange={setSearchQuery}
                         totalCount={items.length}
                         filteredCount={filteredItems.length}
                         dynamicCategories={categoryOptions}
@@ -647,6 +656,7 @@ export default function AdminMenuPage() {
                             {items.length > 0 && (
                                 <button
                                     onClick={() => {
+                                        setSearchQuery("");
                                         setCategoryFilter("all");
                                         setAvailabilityFilter("all");
                                     }}

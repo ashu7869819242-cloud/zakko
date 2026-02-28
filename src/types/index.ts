@@ -202,3 +202,34 @@ export interface Feedback {
     comment: string;
     createdAt: string;
 }
+
+// ─── User Demand Plans (Stock Forecasting) ──────
+
+export interface DemandPlan {
+    id: string;
+    userId: string;
+    userName: string;
+    itemId: string;
+    itemName: string;
+    quantity: number;
+    days: string[];          // ["Monday", "Tuesday", …]
+    isActive: boolean;
+    createdAt: string;
+    updatedAt: string;
+}
+
+// ─── Item Suggestions (Demand Discovery) ────────
+
+export interface ItemSuggestion {
+    id: string;
+    itemName: string;
+    normalizedName: string;      // lowercase trimmed for dedup
+    category?: string;
+    description?: string;
+    expectedPrice?: number;
+    totalRequests: number;
+    requestedBy: string[];       // array of userIds
+    status: "pending" | "approved" | "rejected";
+    createdAt: string;
+    updatedAt: string;
+}

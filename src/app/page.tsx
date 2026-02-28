@@ -114,7 +114,78 @@ export default function MenuPage() {
 
   return (
     <div className="min-h-screen bg-zayko-900 pb-24">
-      {/* ... previous code remains same ... */}
+      {/* ─── Header ─── */}
+      <div className="bg-zayko-800 border-b border-zayko-700 px-6 py-4">
+        <div className="max-w-7xl mx-auto flex items-center justify-between">
+          <div>
+            <h1 className="text-xl font-display font-bold text-white">
+              {profile?.name ? `Hey, ${profile.name.split(" ")[0]} 👋` : "Zayko Menu"}
+            </h1>
+            <p className="text-xs text-zayko-400">
+              {isCanteenOpen ? "Canteen is open" : "Canteen is closed"}
+              {minutesUntilClose !== null && minutesUntilClose > 0 && isCanteenOpen
+                ? ` · Closes in ${minutesUntilClose} min`
+                : ""}
+            </p>
+          </div>
+          <div className="flex items-center gap-2">
+            <Link href="/wallet" className="w-10 h-10 rounded-xl bg-gold-500/10 flex items-center justify-center text-lg hover:bg-gold-500/20 transition-all" title="Wallet">
+              💳
+            </Link>
+            <Link href="/orders" className="w-10 h-10 rounded-xl bg-blue-500/10 flex items-center justify-center text-lg hover:bg-blue-500/20 transition-all" title="Orders">
+              📦
+            </Link>
+          </div>
+        </div>
+      </div>
+
+      {/* ─── Quick Access ─── */}
+      <div className="page-container mt-4 mb-2">
+        <div className="grid grid-cols-3 gap-3">
+          {[
+            { href: "/dashboard/daily-needs", icon: "📋", label: "Daily Needs", color: "bg-blue-500/10 hover:bg-blue-500/20 text-blue-400 border-blue-500/20" },
+            { href: "/dashboard/suggest-item", icon: "💡", label: "Suggest Item", color: "bg-amber-500/10 hover:bg-amber-500/20 text-amber-400 border-amber-500/20" },
+            { href: "/dashboard/feedback", icon: "⭐", label: "Feedback", color: "bg-gold-500/10 hover:bg-gold-500/20 text-gold-400 border-gold-500/20" },
+          ].map((item) => (
+            <Link key={item.href} href={item.href}
+              className={`flex flex-col items-center gap-1.5 py-3 px-2 rounded-2xl border transition-all ${item.color}`}>
+              <span className="text-2xl">{item.icon}</span>
+              <span className="text-xs font-semibold text-center">{item.label}</span>
+            </Link>
+          ))}
+        </div>
+      </div>
+
+      {/* ─── Search & Category Bar ─── */}
+      <div className="page-container mt-4 mb-2">
+        <div className="flex flex-col sm:flex-row gap-3">
+          <div className="relative flex-1">
+            <span className="absolute left-4 top-1/2 -translate-y-1/2 text-zayko-400 text-sm">🔍</span>
+            <input
+              type="text"
+              placeholder="Search menu..."
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              className="w-full pl-10 pr-4 py-3 rounded-xl bg-white/5 border border-white/10 text-white placeholder:text-zayko-500 focus:outline-none focus:ring-2 focus:ring-gold-400 text-sm"
+            />
+          </div>
+          <div className="flex gap-2 overflow-x-auto no-scrollbar">
+            <button onClick={() => setCategory("all")}
+              className={`px-4 py-2 rounded-xl text-sm font-semibold whitespace-nowrap transition-all ${category === "all" ? "bg-gold-500 text-zayko-900" : "bg-white/5 text-zayko-400 border border-white/10"}`}>
+              All
+            </button>
+            {categories.map((cat) => (
+              <button key={cat.id} onClick={() => setCategory(cat.name)}
+                className={`px-4 py-2 rounded-xl text-sm font-semibold whitespace-nowrap transition-all ${category === cat.name ? "bg-gold-500 text-zayko-900" : "bg-white/5 text-zayko-400 border border-white/10"}`}>
+                {cat.name}
+              </button>
+            ))}
+          </div>
+        </div>
+        <div className="flex items-center justify-between mt-3">
+          <p className="text-xs text-zayko-400">{availableCount} items available</p>
+        </div>
+      </div>
 
       {/* ─── Menu Layout ─── */}
       <div className="page-container space-y-12">
